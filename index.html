@@ -71,14 +71,16 @@ const D=[
 ["أي مما يأتي أفضل وصف في بيان سبب إنشاء النسخ الاحتياطي للبيانات؟",["لتوفير مساحة أكبر لتخزين الملفات على القرص الصلب","لتمكين الوصول إلى البيانات من أي جزء في العالم","لتخزين الملفات بأكثر الطرق فاعلية من حيث التكلفة","لتجنب فقدان الملفات في حال تلف النسخة الأصلية"],3]
 ];
 const app=document.getElementById('app');
-let Q,i,sc,wrong,T,tid;
+// مفتاح Web3Forms الخاص بالنموذج
+const WEB3FORMS_ACCESS_KEY='37e2d6b1-aa3d-4c9a-bed1-e03f3e10ecfa';
+let Q,i,sc,wrong,T,tid,studentName='',responses=[],resultSent=false;
 const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
 function tick(){T--;const e=document.getElementById('t');if(e){e.textContent=fmt(Math.max(T,0));if(T<=60)e.classList.add('low')}if(T<=0)end(true)}
 const sh=a=>{a=a.slice();for(let k=a.length-1;k>0;k--){const j=Math.random()*(k+1)|0;[a[k],a[j]]=[a[j],a[k]]}return a};
 const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
 function start(){
-  app.innerHTML=`<h1>اختبار أساسيات الحاسب</h1><p>${D.length} سؤالاً من أسئلة القسم النظري. اختر الإجابة الصحيحة وستظهر النتيجة في النهاية.</p><p>⏱️ مدة الاختبار: ${fmt(D.length*45)} دقيقة (45 ثانية لكل سؤال تقريباً)، وعند انتهاء الوقت يُغلق الاختبار تلقائياً.</p><button class="btn" id="go">ابدأ الاختبار</button>`;
-  document.getElementById('go').onclick=()=>{Q=sh(D.map(([q,o,a])=>({q,o:sh(o.map((t,n)=>({t,c:n==a}))) })));i=0;sc=0;wrong=[];T=D.length*45;clearInterval(tid);show();tid=setInterval(tick,1000)};
+  app.innerHTML=`<h1>اختبار أساسيات الحاسب</h1><p>${D.length} سؤالاً من أسئلة القسم النظري. اختر الإجابة الصحيحة وستظهر النتيجة في النهاية.</p><p>⏱️ مدة الاختبار: ${fmt(D.length*45)} دقيقة (45 ثانية لكل سؤال تقريباً)، وعند انتهاء الوقت يُغلق الاختبار تلقائياً.</p><label for="studentName"><b>اسم الطالب</b></label><input id="studentName" type="text" maxlength="100" placeholder="اكتب اسمك الكامل" required style="display:block;width:100%;font:inherit;padding:12px;border:2px solid var(--bd);border-radius:10px;margin:8px 0"><button class="btn" id="go">ابدأ الاختبار</button>`;
+  document.getElementById('go').onclick=()=>{const name=document.getElementById('studentName').value.trim();if(!name){alert('يرجى كتابة اسم الطالب قبل بدء الاختبار.');return;}studentName=name;Q=sh(D.map(([q,o,a])=>({q,o:sh(o.map((t,n)=>({t,c:n==a}))) })));i=0;sc=0;wrong=[];responses=Array(D.length).fill(null);resultSent=false;T=D.length*45;clearInterval(tid);show();tid=setInterval(tick,1000)};
 }
 function show(){
   const x=Q[i];
@@ -86,18 +88,42 @@ function show(){
   const o=document.getElementById('o'),nx=document.getElementById('nx');
   x.o.forEach(op=>{const b=document.createElement('button');b.className='opt';b.textContent=op.t;
     b.onclick=()=>{[...o.children].forEach((e,n)=>{e.disabled=true;if(x.o[n].c)e.classList.add('ok')});
+      responses[i]=op.t;
       if(op.c)sc++;else{b.classList.add('no');wrong.push([x.q,op.t,x.o.find(z=>z.c).t])}
       nx.hidden=false;nx.focus()};
     o.appendChild(b)});
   nx.onclick=()=>{i++;i<Q.length?show():end()};
 }
-function end(to){clearInterval(tid);
+async function sendResult(percent, message, timedOut){
+  const details=Q.map((x,n)=>{
+    const correct=x.o.find(op=>op.c).t;
+    const answer=responses[n]===null?'لم تتم الإجابة':responses[n];
+    return `${n+1}. ${x.q}\nإجابة الطالب: ${answer}\nالإجابة الصحيحة: ${correct}\nالتقييم: ${responses[n]===null?'غير مجاب':responses[n]===correct?'صحيح':'خطأ'}`;
+  }).join('\n\n');
+  const report=`اسم الطالب: ${studentName}\nالاختبار: اختبار أساسيات الحاسب\nالنتيجة: ${sc} من ${Q.length}\nالنسبة: ${percent}%\nالتقدير: ${message}\nانتهاء الوقت تلقائياً: ${timedOut?'نعم':'لا'}\n\nتفاصيل الإجابات:\n${details}`;
+  const status=document.getElementById('sendStatus');
+  try{
+    const response=await fetch('https://api.web3forms.com/submit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({access_key:WEB3FORMS_ACCESS_KEY,subject:`نتيجة اختبار أساسيات الحاسب - ${studentName}`,from_name:'نظام اختبارات الطلاب',name:studentName,message:report})
+    });
+    const data=await response.json();
+    if(!response.ok || !data.success) throw new Error(data.message||'تعذر إرسال النتيجة');
+    if(status) status.textContent='✓ تم إرسال نتيجتك بنجاح.';
+  }catch(error){
+    if(status) status.textContent='تعذّر إرسال النتيجة الآن. يرجى إبلاغ المعلم وإعادة المحاولة لاحقاً.';
+    console.error('Web3Forms error:',error);
+  }
+}
+function end(to){clearInterval(tid);if(resultSent)return;resultSent=true;
   const p=Math.round(sc/Q.length*100);
   const msg=p>=90?'ممتاز! 🌟':p>=70?'جيد جداً 👍':p>=50?'مقبول، تحتاج لمراجعة بسيطة':'تحتاج إلى مزيد من المراجعة';
-  app.innerHTML=`<h1>نتيجة الاختبار</h1><div class="score">${sc} / ${Q.length}</div><div class="res">${p}% — ${msg}</div>${to?`<p class="res">⏰ انتهى الوقت، واحتُسبت ${Q.length-sc-wrong.length} أسئلة غير مجابة كأخطاء.</p>`:''}`+
+  app.innerHTML=`<h1>نتيجة الاختبار</h1><div class="score">${sc} / ${Q.length}</div><div class="res">${p}% — ${msg}</div>${to?`<p class="res">⏰ انتهى الوقت، واحتُسبت الأسئلة غير المجابة كأخطاء.</p>`:''}`+
   (wrong.length?`<h3>الأسئلة التي أخطأت فيها</h3>`+wrong.map(w=>`<div class="rev">${esc(w[0])}<br><b>إجابتك: ${esc(w[1])}</b><br><span>الصحيح: ${esc(w[2])}</span></div>`).join(''):'<p class="res">إجاباتك كلها صحيحة!</p>')+
-  `<button class="btn" id="re">إعادة الاختبار</button>`;
+  `<p id="sendStatus" class="res" aria-live="polite">⏳ جارٍ إرسال النتيجة إلى المعلم...</p><button class="btn" id="re">إعادة الاختبار</button>`;
   document.getElementById('re').onclick=start;
+  sendResult(p,msg,to);
 }
 start();
 </script>
