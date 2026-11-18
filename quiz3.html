@@ -22,6 +22,7 @@ h1{font-size:1.4rem;margin:0 0 8px}
 .opt:hover:not(:disabled){border-color:var(--pri)}
 .opt.ok{border-color:var(--ok);background:var(--okb)}
 .opt.no{border-color:var(--no);background:var(--nob)}
+.inp{font:inherit;width:100%;padding:12px;border:2px solid var(--bd);border-radius:12px;background:transparent;color:inherit;margin-top:8px}
 .btn{font:inherit;font-weight:700;background:var(--pri);color:#fff;border:0;border-radius:12px;padding:12px 22px;cursor:pointer;margin-top:12px}
 .btn[hidden]{display:none}
 .score{font-size:3rem;font-weight:800;text-align:center;margin:8px 0}
@@ -57,14 +58,14 @@ const D=[
 ["أي مما يأتي يعد طريقة مناسبة لإيقاف تشغيل تطبيق لا يستجيب؟",["الضغط على المفاتيح ALT+CTRL+DELETE، نختار ادارة المهام، ثم نختار انهاء المهمة","إغلاق كافة المستندات والضغط على زر الطاقة الكهربائية حتى يتم ايقاف التشغيل","النقر على زر ابدأ، ثم النقر على زر ايقاف تشغيل الحاسوب","سحب كيبل الطاقة الكهربائية من خلف الحاسوب"],0]
 ];
 const app=document.getElementById('app');
-let Q,i,sc,wrong,T,tid;
+let Q,i,sc,wrong,T,tid,NAME,sent;
 const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
 function tick(){T--;const e=document.getElementById('t');if(e){e.textContent=fmt(Math.max(T,0));if(T<=60)e.classList.add('low')}if(T<=0)end(true)}
 const sh=a=>{a=a.slice();for(let k=a.length-1;k>0;k--){const j=Math.random()*(k+1)|0;[a[k],a[j]]=[a[j],a[k]]}return a};
 const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
 function start(){
-  app.innerHTML=`<h1>اختبار أساسيات الحاسب - الجزء 3</h1><p>${D.length} سؤالاً من أسئلة القسم النظري. اختر الإجابة الصحيحة وستظهر النتيجة في النهاية.</p><p>⏱️ مدة الاختبار: ${fmt(D.length*45)} دقيقة (45 ثانية لكل سؤال تقريباً)، وعند انتهاء الوقت يُغلق الاختبار تلقائياً.</p><button class="btn" id="go">ابدأ الاختبار</button>`;
-  document.getElementById('go').onclick=()=>{Q=sh(D.map(([q,o,a])=>({q,o:sh(o.map((t,n)=>({t,c:n==a}))) })));i=0;sc=0;wrong=[];T=D.length*45;clearInterval(tid);show();tid=setInterval(tick,1000)};
+  app.innerHTML=`<h1>اختبار أساسيات الحاسب - الجزء 3</h1><p>${D.length} سؤالاً من أسئلة القسم النظري. اختر الإجابة الصحيحة وستظهر النتيجة في النهاية.</p><p>⏱️ مدة الاختبار: ${fmt(D.length*45)} دقيقة (45 ثانية لكل سؤال تقريباً)، وعند انتهاء الوقت يُغلق الاختبار تلقائياً.</p><input id="nm" class="inp" placeholder="اكتب اسمك الكامل" maxlength="60" autocomplete="name"><br><button class="btn" id="go">ابدأ الاختبار</button>`;
+  document.getElementById('nm').value=NAME||'';document.getElementById('go').onclick=()=>{const nm=document.getElementById('nm'),v=nm.value.trim();if(v.length<2){nm.focus();nm.style.borderColor='var(--no)';return}NAME=v;sent=false;Q=sh(D.map(([q,o,a])=>({q,o:sh(o.map((t,n)=>({t,c:n==a}))) })));i=0;sc=0;wrong=[];T=D.length*45;clearInterval(tid);show();tid=setInterval(tick,1000)};
 }
 function show(){
   const x=Q[i];
@@ -77,13 +78,24 @@ function show(){
     o.appendChild(b)});
   nx.onclick=()=>{i++;i<Q.length?show():end()};
 }
+function send(p,to){
+  if(sent)return;sent=true;
+  const st=document.getElementById('st');
+  const un=Q.length-sc-wrong.length;
+  const body={access_key:'37e2d6b1-aa3d-4c9a-bed1-e03f3e10ecfa',subject:'نتيجة '+NAME+' - '+document.title,from_name:'اختبار أساسيات الحاسب',
+    'الاسم':NAME,'الاختبار':document.title,'العلامة':sc+' / '+Q.length,'النسبة':p+'%','أسئلة غير مجابة':un,
+    'الأخطاء':wrong.map((w,n)=>(n+1)+') '+w[0]+' | إجابته: '+w[1]+' | الصحيح: '+w[2]).join('\n')||'لا يوجد'};
+  fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body)})
+   .then(r=>r.json()).then(j=>{if(j.success){st.textContent='✅ تم إرسال نتيجتك للمعلمة'}else throw 0})
+   .catch(()=>{sent=false;st.innerHTML='⚠️ تعذر الإرسال. <button class="btn" id="rt">إعادة المحاولة</button><br>أو صوّر شاشة النتيجة وأرسلها للمعلمة';document.getElementById('rt').onclick=()=>send(p,to)});
+}
 function end(to){clearInterval(tid);
   const p=Math.round(sc/Q.length*100);
   const msg=p>=90?'ممتاز! 🌟':p>=70?'جيد جداً 👍':p>=50?'مقبول، تحتاج لمراجعة بسيطة':'تحتاج إلى مزيد من المراجعة';
   app.innerHTML=`<h1>نتيجة الاختبار</h1><div class="score">${sc} / ${Q.length}</div><div class="res">${p}% — ${msg}</div>${to?`<p class="res">⏰ انتهى الوقت، واحتُسبت ${Q.length-sc-wrong.length} أسئلة غير مجابة كأخطاء.</p>`:''}`+
   (wrong.length?`<h3>الأسئلة التي أخطأت فيها</h3>`+wrong.map(w=>`<div class="rev">${esc(w[0])}<br><b>إجابتك: ${esc(w[1])}</b><br><span>الصحيح: ${esc(w[2])}</span></div>`).join(''):'<p class="res">إجاباتك كلها صحيحة!</p>')+
-  `<button class="btn" id="re">إعادة الاختبار</button>`;
-  document.getElementById('re').onclick=start;
+  `<p class="res" id="st">⏳ جاري إرسال نتيجتك...</p><button class="btn" id="re">إعادة الاختبار</button>`;
+  document.getElementById('re').onclick=start;send(p,to);
 }
 start();
 </script>
